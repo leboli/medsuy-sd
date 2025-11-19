@@ -1,54 +1,97 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Search, MapPin, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-
-const mockAppointments = [
-  {
-    id: 1,
-    doctor: "Dr. Evelyn Reed",
-    specialty: "Cardiology",
-    location: "Main Health Clinic",
-    date: "Mon, June 24",
-    time: "02:30 PM",
-    avatar: "",
-  },
-  {
-    id: 2,
-    doctor: "Dr. Marcus Chen",
-    specialty: "Dermatology",
-    location: "Downtown Medical Center",
-    date: "Tue, June 25",
-    time: "04:00 PM",
-    avatar: "",
-  },
-  {
-    id: 3,
-    doctor: "Dr. Sarah Jenkins",
-    specialty: "Neurology",
-    location: "Main Health Clinic",
-    date: "Wed, June 26",
-    time: "03:15 PM",
-    avatar: "",
-  },
-];
+import { getAvailableAppointments } from "@/api/patientService";
 
 const BookAppointment = () => {
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [timeOfDay, setTimeOfDay] = useState<string[]>(["afternoon"]);
 
   const toggleTimeOfDay = (period: string) => {
     setTimeOfDay((prev) =>
-      prev.includes(period) ? prev.filter((p) => p !== period) : [...prev, period]
+      prev.includes(period)
+        ? prev.filter((p) => p !== period)
+        : [...prev, period]
     );
   };
+
+  // 📌 Cargar turnos reales desde el backend
+  useEffect(() => {
+    const loadAppointments = async () => {
+      try {
+        const res = await getAvailableAppointments();
+
+        // Adaptar formato backend → frontend
+        const formatted = res.map((item: any) => {
+          const dateObj = new Date(item.datetime);
+
+          return {
+            id: item.id,
+            doctor: item.doctor,
+            specialty: item.specialty,
+            location: item.branch,
+            avatar: "",
+            date: dateObj.toLocaleDateString("en-US", {
+              weekday: "short",
+              month: "long",
+              day: "numeric",
+            }),
+            time: dateObj.toLocaleTimeString("en-US", {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          };
+        });
+
+        setAppointments(formatted);
+      } catch (err) {
+        console.error(err);
+        setError("Error loading available appointments");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadAppointments();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="container mx-auto px-6 py-8">
+        <p className="text-lg">Loading appointments...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto px-6 py-8">
+        <p className="text-lg text-red-500">{error}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto px-6 py-8">
       <div className="mb-8">
-        <h1 className="text-4xl font-bold text-foreground mb-2">Book an Appointment</h1>
-        <p className="text-muted-foreground">Find and schedule your next visit with ease.</p>
+        <h1 className="text-4xl font-bold text-foreground mb-2">
+          Book an Appointment
+        </h1>
+        <p className="text-muted-foreground">
+          Find and schedule your next visit with ease.
+        </p>
       </div>
 
       <div className="grid md:grid-cols-[320px_1fr] gap-8">
@@ -63,30 +106,29 @@ const BookAppointment = () => {
             </div>
 
             <div>
-              <label className="text-sm font-medium mb-2 block">Medical Specialty</label>
+              <label className="text-sm font-medium mb-2 block">
+                Medical Specialty
+              </label>
               <Select>
                 <SelectTrigger>
                   <SelectValue placeholder="All Specialties" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Specialties</SelectItem>
-                  <SelectItem value="cardiology">Cardiology</SelectItem>
-                  <SelectItem value="dermatology">Dermatology</SelectItem>
-                  <SelectItem value="neurology">Neurology</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div>
-              <label className="text-sm font-medium mb-2 block">Specific Doctor</label>
+              <label className="text-sm font-medium mb-2 block">
+                Specific Doctor
+              </label>
               <Select>
                 <SelectTrigger>
                   <SelectValue placeholder="Any Doctor" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="any">Any Doctor</SelectItem>
-                  <SelectItem value="reed">Dr. Evelyn Reed</SelectItem>
-                  <SelectItem value="chen">Dr. Marcus Chen</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -97,7 +139,9 @@ const BookAppointment = () => {
             </div>
 
             <div>
-              <label className="text-sm font-medium mb-2 block">Time of Day</label>
+              <label className="text-sm font-medium mb-2 block">
+                Time of Day
+              </label>
               <div className="flex flex-wrap gap-2">
                 <Button
                   variant={timeOfDay.includes("morning") ? "default" : "outline"}
@@ -107,7 +151,9 @@ const BookAppointment = () => {
                   Morning
                 </Button>
                 <Button
-                  variant={timeOfDay.includes("afternoon") ? "default" : "outline"}
+                  variant={
+                    timeOfDay.includes("afternoon") ? "default" : "outline"
+                  }
                   size="sm"
                   onClick={() => toggleTimeOfDay("afternoon")}
                 >
@@ -131,8 +177,8 @@ const BookAppointment = () => {
         <div>
           <div className="flex items-center justify-between mb-6">
             <p className="text-foreground">
-              Showing <span className="font-semibold">12 appointments</span> for{" "}
-              <span className="text-primary font-semibold">June 24 - 30, 2024</span>
+              Showing{" "}
+              <span className="font-semibold">{appointments.length} appointments</span>
             </p>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="icon">
@@ -145,7 +191,7 @@ const BookAppointment = () => {
           </div>
 
           <div className="space-y-4">
-            {mockAppointments.map((appointment) => (
+            {appointments.map((appointment) => (
               <div
                 key={appointment.id}
                 className="bg-card border rounded-lg p-6 flex items-center justify-between hover:shadow-md transition-shadow"
@@ -154,12 +200,17 @@ const BookAppointment = () => {
                   <Avatar className="h-16 w-16">
                     <AvatarImage src={appointment.avatar} />
                     <AvatarFallback className="bg-primary/10 text-primary font-semibold">
-                      {appointment.doctor.split(" ").map((n) => n[0]).join("")}
+                      {appointment.doctor
+                        .split(" ")
+                        .map((n) => n[0])
+                        .join("")}
                     </AvatarFallback>
                   </Avatar>
                   <div>
                     <h3 className="font-semibold text-lg">{appointment.doctor}</h3>
-                    <p className="text-sm text-muted-foreground">{appointment.specialty}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {appointment.specialty}
+                    </p>
                     <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
                       <MapPin className="h-3 w-3" />
                       {appointment.location}
@@ -169,15 +220,20 @@ const BookAppointment = () => {
 
                 <div className="flex items-center gap-6">
                   <div className="text-right">
-                    <p className="text-sm text-muted-foreground">{appointment.date}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {appointment.date}
+                    </p>
                     <p className="text-xl font-semibold">{appointment.time}</p>
                   </div>
-                  <Button className="bg-success hover:bg-success/90">Book Now</Button>
+                  <Button className="bg-success hover:bg-success/90">
+                    Book Now
+                  </Button>
                 </div>
               </div>
             ))}
           </div>
         </div>
+
       </div>
     </div>
   );
