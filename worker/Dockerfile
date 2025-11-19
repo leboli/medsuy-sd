@@ -1,13 +1,10 @@
-FROM python:3.11-slim
+FROM python:3.10-slim
 
-WORKDIR /worker
+WORKDIR /app
 
-# Copiar requirements propios del worker
 COPY requirements.txt .
-
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar el script del worker
 COPY worker.py .
 
 CMD ["python", "worker.py"]

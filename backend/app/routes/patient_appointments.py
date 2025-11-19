@@ -9,6 +9,13 @@ from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+import pika
+import json
+import os
+
+from starlette.concurrency import run_in_threadpool
+from fastapi import BackgroundTasks
+
 from app.db import get_session
 from app.models import Consulta, Medico, Paciente, Sucursal, Usuario
 
@@ -48,7 +55,9 @@ class ReserveAppointmentRequest(BaseModel):
 
 async def _get_paciente_or_404(session: AsyncSession, paciente_id: int) -> Paciente:
     result = await session.execute(
-        select(Paciente).where(
+        select(Paciente)
+        .options(selectinload(Paciente.usuario))
+        .where(
             Paciente.usuario_id == paciente_id,
             Paciente.is_activo.is_(True)
         )
@@ -59,9 +68,29 @@ async def _get_paciente_or_404(session: AsyncSession, paciente_id: int) -> Pacie
     return paciente
 
 
+
 # =====================
 # ENDPOINTS
 # =====================
+
+def send_rabbitmq_message(message: dict):
+    rabbit_host = os.getenv("RABBIT_HOST", "rabbitmq")
+    rabbit_queue = os.getenv("RABBIT_QUEUE", "notifications")
+
+    connection = pika.BlockingConnection(
+        pika.ConnectionParameters(host=rabbit_host)
+    )
+    channel = connection.channel()
+    channel.queue_declare(queue=rabbit_queue, durable=True)
+
+    channel.basic_publish(
+        exchange="",
+        routing_key=rabbit_queue,
+        body=json.dumps(message),
+        properties=pika.BasicProperties(delivery_mode=2)
+    )
+
+    connection.close()
 
 @router.get("/{paciente_id}/appointments/upcoming", response_model=List[AppointmentBase])
 async def get_upcoming(
@@ -153,19 +182,28 @@ async def get_available(
     return resp
 
 
+# ==============================================
+# RESERVE APPOINTMENT + RabbitMQ notification
+# ==============================================
 @router.post("/{paciente_id}/appointments/reserve", status_code=status.HTTP_201_CREATED)
 async def reserve(
     paciente_id: int,
     body: ReserveAppointmentRequest,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
 ):
-    await _get_paciente_or_404(session, paciente_id)
+    paciente = await _get_paciente_or_404(session, paciente_id)
 
     stmt = (
         select(Consulta)
+        .options(
+            selectinload(Consulta.medico).selectinload(Medico.usuario),
+            selectinload(Consulta.sucursal),
+        )
         .where(Consulta.id == body.consulta_id)
         .with_for_update()
     )
+
     result = await session.execute(stmt)
     consulta = result.scalar_one_or_none()
 
@@ -179,6 +217,21 @@ async def reserve(
     consulta.estado = "reservado"
 
     await session.commit()
+
+    notification = {
+        "type": "appointment_reserved",
+        "paciente_id": paciente_id,
+        "consulta_id": consulta.id,
+        "doctor": f"{consulta.medico.usuario.nombre} {consulta.medico.usuario.apellido}",
+        "specialty": consulta.especialidad,
+        "datetime": str(consulta.fecha_hora),
+        "branch": consulta.sucursal.nombre,
+        "email": paciente.usuario.email if paciente.usuario else None
+    }
+
+    #ESTO SÍ FUNCIONA — Sin bloquear el async
+    background_tasks.add_task(send_rabbitmq_message, notification)
+
     return {"message": "Turno reservado", "consulta_id": consulta.id}
 
 

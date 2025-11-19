@@ -65,7 +65,7 @@ async def seed():
             nombre="María",
             apellido="Gómez",
             cedula="98765432",
-            email="paciente@example.com",
+            email="luciaeboli12@gmail.com",
             fecha_nac=date(1995, 3, 14),
             celular="097333333",
             rol="paciente",

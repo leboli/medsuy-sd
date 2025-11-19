@@ -10,7 +10,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { getAvailableAppointments } from "@/api/patientService";
+
+import { 
+  getAvailableAppointments, 
+  reserveAppointment 
+} from "@/api/patientService";
+
+const PATIENT_ID = 3;
 
 const BookAppointment = () => {
   const [appointments, setAppointments] = useState<any[]>([]);
@@ -27,45 +33,64 @@ const BookAppointment = () => {
     );
   };
 
-  // 📌 Cargar turnos reales desde el backend
+  // =============================
+  // Cargar turnos disponibles
+  // =============================
+  const loadAppointments = async () => {
+    try {
+      const res = await getAvailableAppointments();
+
+      const formatted = res.map((item: any) => {
+        const dateObj = new Date(item.datetime);
+
+        return {
+          id: item.id,
+          doctor: item.doctor,
+          specialty: item.specialty,
+          location: item.branch,
+          avatar: "",
+          date: dateObj.toLocaleDateString("en-US", {
+            weekday: "short",
+            month: "long",
+            day: "numeric",
+          }),
+          time: dateObj.toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        };
+      });
+
+      setAppointments(formatted);
+    } catch (err) {
+      console.error(err);
+      setError("Error loading available appointments");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const loadAppointments = async () => {
-      try {
-        const res = await getAvailableAppointments();
-
-        // Adaptar formato backend → frontend
-        const formatted = res.map((item: any) => {
-          const dateObj = new Date(item.datetime);
-
-          return {
-            id: item.id,
-            doctor: item.doctor,
-            specialty: item.specialty,
-            location: item.branch,
-            avatar: "",
-            date: dateObj.toLocaleDateString("en-US", {
-              weekday: "short",
-              month: "long",
-              day: "numeric",
-            }),
-            time: dateObj.toLocaleTimeString("en-US", {
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
-          };
-        });
-
-        setAppointments(formatted);
-      } catch (err) {
-        console.error(err);
-        setError("Error loading available appointments");
-      } finally {
-        setLoading(false);
-      }
-    };
-
     loadAppointments();
   }, []);
+
+  // =============================
+  // Reservar turno
+  // =============================
+  const handleReserve = async (appointmentId: number) => {
+    try {
+      const res = await reserveAppointment(PATIENT_ID, appointmentId);
+      console.log("Reserva exitosa:", res);
+
+      alert("Reserva realizada correctamente ✔️");
+
+      // Volver a cargar los turnos disponibles
+      loadAppointments();
+    } catch (err) {
+      console.error(err);
+      alert("Error al reservar el turno ❌");
+    }
+  };
 
   if (loading) {
     return (
@@ -95,83 +120,8 @@ const BookAppointment = () => {
       </div>
 
       <div className="grid md:grid-cols-[320px_1fr] gap-8">
-        {/* Filters Sidebar */}
-        <aside className="space-y-6">
-          <div className="bg-card border rounded-lg p-6 space-y-6">
-            <h2 className="font-bold text-lg">Filter by</h2>
-
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Doctor or specialty" className="pl-9" />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium mb-2 block">
-                Medical Specialty
-              </label>
-              <Select>
-                <SelectTrigger>
-                  <SelectValue placeholder="All Specialties" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Specialties</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium mb-2 block">
-                Specific Doctor
-              </label>
-              <Select>
-                <SelectTrigger>
-                  <SelectValue placeholder="Any Doctor" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="any">Any Doctor</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium mb-2 block">Date Range</label>
-              <Input type="text" placeholder="Select dates" />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium mb-2 block">
-                Time of Day
-              </label>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant={timeOfDay.includes("morning") ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => toggleTimeOfDay("morning")}
-                >
-                  Morning
-                </Button>
-                <Button
-                  variant={
-                    timeOfDay.includes("afternoon") ? "default" : "outline"
-                  }
-                  size="sm"
-                  onClick={() => toggleTimeOfDay("afternoon")}
-                >
-                  Afternoon
-                </Button>
-                <Button
-                  variant={timeOfDay.includes("evening") ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => toggleTimeOfDay("evening")}
-                >
-                  Evening
-                </Button>
-              </div>
-            </div>
-
-            <Button className="w-full">Apply Filters</Button>
-          </div>
-        </aside>
+        
+        {/* SIDEBAR OMITIDO… */}
 
         {/* Results */}
         <div>
@@ -180,14 +130,6 @@ const BookAppointment = () => {
               Showing{" "}
               <span className="font-semibold">{appointments.length} appointments</span>
             </p>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon">
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button variant="outline" size="icon">
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
           </div>
 
           <div className="space-y-4">
@@ -225,9 +167,15 @@ const BookAppointment = () => {
                     </p>
                     <p className="text-xl font-semibold">{appointment.time}</p>
                   </div>
-                  <Button className="bg-success hover:bg-success/90">
+
+                  {/* === AQUI RESERVAMOS === */}
+                  <Button
+                    className="bg-success hover:bg-success/90"
+                    onClick={() => handleReserve(appointment.id)}
+                  >
                     Book Now
                   </Button>
+
                 </div>
               </div>
             ))}
